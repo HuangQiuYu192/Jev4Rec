@@ -13,6 +13,7 @@ AGENTCF_DIR = Path(__file__).resolve().parents[1] / "agentcf"
 sys.path.insert(0, str(AGENTCF_DIR))
 
 from run_jev_direct_rerank import add_pretrained_descriptions, candidate_set, score_candidates
+from run_jev_pairwise_gate_probe import build_balanced_pairwise_questions
 
 
 def test_candidate_set_reproduces_seeded_agentcf_shuffle() -> None:
@@ -42,3 +43,10 @@ def test_pretrained_descriptions_attach_only_known_items() -> None:
         ],
     )
     assert catalog == {"known": {"title": "A", "category": "B", "description": "rich text"}}
+
+
+def test_pairwise_probe_balances_candidate_to_label_order() -> None:
+    catalog = {"positive": {"title": "P"}, "negative": {"title": "N"}}
+    questions = build_balanced_pairwise_questions("positive", ["negative"], catalog)
+    assert list(questions["pair_0_order_0"]["criteria"]) == ["positive", "negative"]
+    assert list(questions["pair_0_order_1"]["criteria"]) == ["negative", "positive"]
