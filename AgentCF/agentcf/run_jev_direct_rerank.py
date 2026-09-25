@@ -65,23 +65,29 @@ def candidate_set(
     return chosen
 
 
-def score_candidate(endpoint: str, history: List[Dict[str, str]], candidate: Dict[str, str], timeout: float) -> float:
+def score_candidates(
+    endpoint: str, history: List[Dict[str, str]], candidates: Sequence[Dict[str, str]], timeout: float
+) -> List[float]:
+    questions = {
+        f"candidate_{index}": {
+            "type": "noul",
+            "instructions": (
+                "The following candidate CD fits the user's demonstrated preferences better than a typical "
+                "unseen CD. Judge only the supplied user history and this candidate.\n"
+                f"CANDIDATE: {json.dumps(candidate, ensure_ascii=False, sort_keys=True)}"
+            ),
+        }
+        for index, candidate in enumerate(candidates)
+    }
     payload = {
         "model": "qwen3-14b-jev-style",
-        "state": {"recent_history": history, "candidate": candidate},
-        "questions": {
-            "matches_preference": {
-                "type": "noul",
-                "instructions": (
-                    "The candidate CD fits the user's demonstrated preferences better than a typical "
-                    "unseen CD. Judge only the supplied history, title, and category."
-                ),
-            }
-        },
+        "state": {"recent_history": history},
+        "questions": questions,
     }
     response = requests.post(endpoint, json=payload, timeout=timeout)
     response.raise_for_status()
-    return float(response.json()["answers"]["matches_preference"]["noul"])
+    answers = response.json()["answers"]
+    return [float(answers[f"candidate_{index}"]["noul"]) for index in range(len(candidates))]
 
 
 def ndcg_at_k(rank: int, k: int) -> float:
@@ -123,9 +129,12 @@ def main() -> None:
                 history_ids = row["item_id_list:token_seq"].split()[-args.history_length :]
                 history = [{"item_id": item_id, **catalog[item_id]} for item_id in history_ids]
                 started = time.perf_counter()
+                probabilities = score_candidates(
+                    args.endpoint, history, [catalog[item_id] for item_id in candidate_ids], args.timeout
+                )
                 scored = [
-                    {"item_id": item_id, "score": score_candidate(args.endpoint, history, catalog[item_id], args.timeout)}
-                    for item_id in candidate_ids
+                    {"item_id": item_id, "score": probability}
+                    for item_id, probability in zip(candidate_ids, probabilities)
                 ]
                 elapsed = time.perf_counter() - started
                 ranked = sorted(scored, key=lambda result: result["score"], reverse=True)

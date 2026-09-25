@@ -22,7 +22,7 @@ curl --silent --fail http://127.0.0.1:8010/health >/dev/null
 python run_jev_direct_rerank.py \
   --dataset-dir dataset/CDs-100-user-dense \
   --endpoint http://127.0.0.1:8010/v1/systemone \
-  --users 20 \
+  --users "${JEV_PILOT_USERS:-20}" \
   --seed 2026 \
   --recall-budget 10 \
   --fix-pos -1 \
