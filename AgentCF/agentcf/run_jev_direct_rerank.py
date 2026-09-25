@@ -46,6 +46,14 @@ def item_catalog(rows: Iterable[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
     }
 
 
+def add_pretrained_descriptions(catalog: Dict[str, Dict[str, str]], rows: Iterable[Dict[str, str]]) -> None:
+    """Attach AgentCF's supplied item text without changing the candidate protocol."""
+    for row in rows:
+        item_id = row["item_id:token"]
+        if item_id in catalog:
+            catalog[item_id]["description"] = row["pretrained_item_description:token_seq"]
+
+
 def candidate_set(
     negatives: Sequence[str], positive: str, recall_budget: int, fix_pos: int, rng: np.random.RandomState
 ) -> List[str]:
@@ -126,6 +134,11 @@ def main() -> None:
     parser.add_argument("--fix-pos", type=int, default=-1)
     parser.add_argument("--history-length", type=int, default=8)
     parser.add_argument("--choice-permutations", type=int, default=1)
+    parser.add_argument(
+        "--use-pretrained-descriptions",
+        action="store_true",
+        help="Include AgentCF's supplied pretrained item descriptions in state and candidates.",
+    )
     parser.add_argument("--timeout", type=float, default=120.0)
     args = parser.parse_args()
 
@@ -134,6 +147,8 @@ def main() -> None:
     dataset_dir = args.dataset_dir
     tests = read_tsv(dataset_dir / "CDs-100-user-dense.test.inter")
     catalog = item_catalog(read_tsv(dataset_dir / "CDs.item"))
+    if args.use_pretrained_descriptions:
+        add_pretrained_descriptions(catalog, read_tsv(dataset_dir / "CDs.pretrained_item"))
     candidate_rows = read_candidates(dataset_dir / "CDs-100-user-dense.random")
     selected = tests if args.users == 0 else tests[: args.users]
     args.output.parent.mkdir(parents=True, exist_ok=True)

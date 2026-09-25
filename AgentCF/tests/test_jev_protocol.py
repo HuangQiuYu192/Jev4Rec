@@ -12,7 +12,7 @@ import pytest
 AGENTCF_DIR = Path(__file__).resolve().parents[1] / "agentcf"
 sys.path.insert(0, str(AGENTCF_DIR))
 
-from run_jev_direct_rerank import candidate_set, score_candidates
+from run_jev_direct_rerank import add_pretrained_descriptions, candidate_set, score_candidates
 
 
 def test_candidate_set_reproduces_seeded_agentcf_shuffle() -> None:
@@ -30,3 +30,15 @@ def test_candidate_set_rejects_insufficient_persisted_negatives() -> None:
 def test_choice_permutation_bounds_fail_before_network_request() -> None:
     with pytest.raises(ValueError, match="choice_permutations"):
         score_candidates("http://unused", [], ["a", "b"], [{}, {}], 1.0, 0)
+
+
+def test_pretrained_descriptions_attach_only_known_items() -> None:
+    catalog = {"known": {"title": "A", "category": "B"}}
+    add_pretrained_descriptions(
+        catalog,
+        [
+            {"item_id:token": "known", "pretrained_item_description:token_seq": "rich text"},
+            {"item_id:token": "absent", "pretrained_item_description:token_seq": "ignore"},
+        ],
+    )
+    assert catalog == {"known": {"title": "A", "category": "B", "description": "rich text"}}
