@@ -68,20 +68,27 @@ def candidate_set(
 def score_candidates(
     endpoint: str, history: List[Dict[str, str]], candidates: Sequence[Dict[str, str]], timeout: float
 ) -> List[float]:
+    # All questions observe the identical fixed candidate set. A pointwise
+    # “is this a good CD?” question makes nearly every plausible CD a yes;
+    # asking membership in the set's Top-3 creates a meaningful relative
+    # decision while retaining one independent Noul probability per item.
+    candidate_state = [
+        {"candidate_index": index + 1, **candidate} for index, candidate in enumerate(candidates)
+    ]
     questions = {
         f"candidate_{index}": {
             "type": "noul",
             "instructions": (
-                "The following candidate CD fits the user's demonstrated preferences better than a typical "
-                "unseen CD. Judge only the supplied user history and this candidate.\n"
-                f"CANDIDATE: {json.dumps(candidate, ensure_ascii=False, sort_keys=True)}"
+                f"Candidate {index + 1} belongs in the top 3 most suitable CDs in the supplied fixed "
+                "candidate set for this user. Answer yes only for candidates whose title and category "
+                "have stronger evidence of matching the user's history than most alternatives."
             ),
         }
         for index, candidate in enumerate(candidates)
     }
     payload = {
         "model": "qwen3-14b-jev-style",
-        "state": {"recent_history": history},
+        "state": {"recent_history": history, "candidate_set": candidate_state},
         "questions": questions,
     }
     response = requests.post(endpoint, json=payload, timeout=timeout)
