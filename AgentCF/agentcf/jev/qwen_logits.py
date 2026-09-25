@@ -66,6 +66,11 @@ class QwenLogitDecisionEngine:
             torch_dtype=dtype,
             low_cpu_mem_usage=True,
         ).to(self.config.device)
+        adapter_path = os.environ.get("JEV_LORA_ADAPTER")
+        if adapter_path:
+            from peft import PeftModel
+
+            self._model = PeftModel.from_pretrained(self._model, adapter_path).to(self.config.device)
         self._model.eval()
 
     @property
