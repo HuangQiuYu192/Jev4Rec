@@ -14,6 +14,7 @@ sys.path.insert(0, str(AGENTCF_DIR))
 
 from run_jev_direct_rerank import add_pretrained_descriptions, candidate_set, score_candidates
 from run_jev_pairwise_gate_probe import build_balanced_pairwise_questions
+from jev_pairwise_data import make_examples
 
 
 def test_candidate_set_reproduces_seeded_agentcf_shuffle() -> None:
@@ -50,3 +51,12 @@ def test_pairwise_probe_balances_candidate_to_label_order() -> None:
     questions = build_balanced_pairwise_questions("positive", ["negative"], catalog)
     assert list(questions["pair_0_order_0"]["criteria"]) == ["positive", "negative"]
     assert list(questions["pair_0_order_1"]["criteria"]) == ["negative", "positive"]
+
+
+def test_lora_examples_exclude_history_and_balance_labels() -> None:
+    catalog = {item_id: {"title": item_id} for item_id in ["h", "p", "n1", "n2", "n3"]}
+    rows = [{"item_id:token": "p", "item_id_list:token_seq": "h"}]
+    examples = make_examples(rows, catalog, list(catalog), 2, 1, 2026)
+    assert len(examples) == 2
+    assert {example["label"] for example in examples} <= {"A", "B"}
+    assert all(example["negative_item"] not in {"h", "p"} for example in examples)
