@@ -7,6 +7,9 @@ export JEV_DEVICE=cuda:0
 export JEV_QWEN_MODEL=/home/hqy/.cache/huggingface/hub/models--Qwen--Qwen3-14B/snapshots/$(ls /home/hqy/.cache/huggingface/hub/models--Qwen--Qwen3-14B/snapshots | head -n 1)
 export TOKENIZERS_PARALLELISM=false
 
+source "${CONDA_HOME:-/home/hqy/miniconda3}/etc/profile.d/conda.sh"
+conda activate "${JEV_CONDA_ENV:-jev4rec}"
+
 cd "$(dirname "$0")/../agentcf"
 mkdir -p ../../experiments/jev/outputs
 python -m uvicorn jev.server:app --host 127.0.0.1 --port 8010 > ../../experiments/jev/outputs/qwen_jev_server.log 2>&1 &
