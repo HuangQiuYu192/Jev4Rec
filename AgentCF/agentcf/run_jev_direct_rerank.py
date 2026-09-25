@@ -66,35 +66,40 @@ def candidate_set(
 
 
 def score_candidates(
-    endpoint: str, history: List[Dict[str, str]], candidates: Sequence[Dict[str, str]], timeout: float
+    endpoint: str,
+    history: List[Dict[str, str]],
+    candidate_ids: Sequence[str],
+    candidates: Sequence[Dict[str, str]],
+    timeout: float,
 ) -> List[float]:
-    # All questions observe the identical fixed candidate set. A pointwise
-    # “is this a good CD?” question makes nearly every plausible CD a yes;
-    # asking membership in the set's Top-3 creates a meaningful relative
-    # decision while retaining one independent Noul probability per item.
-    candidate_state = [
-        {"candidate_index": index + 1, **candidate} for index, candidate in enumerate(candidates)
-    ]
-    questions = {
-        f"candidate_{index}": {
-            "type": "noul",
-            "instructions": (
-                f"Candidate {index + 1} belongs in the top 3 most suitable CDs in the supplied fixed "
-                "candidate set for this user. Answer yes only for candidates whose title and category "
-                "have stronger evidence of matching the user's history than most alternatives."
-            ),
-        }
-        for index, candidate in enumerate(candidates)
+    if len(candidate_ids) != len(candidates):
+        raise ValueError("candidate ids and candidate metadata have different lengths")
+    # Choice is the native closed-set primitive: its probability distribution
+    # is normalized over the exact ten candidates, unlike independent Noul
+    # questions whose absolute probabilities can all be high.
+    criteria = {
+        item_id: json.dumps(candidate, ensure_ascii=False, sort_keys=True)
+        for item_id, candidate in zip(candidate_ids, candidates)
     }
     payload = {
         "model": "qwen3-14b-jev-style",
-        "state": {"recent_history": history, "candidate_set": candidate_state},
-        "questions": questions,
+        "state": {"recent_history": history},
+        "questions": {
+            "best_candidate": {
+                "type": "choice",
+                "instructions": (
+                    "Select the one CD whose title and category are most compatible with the user's demonstrated "
+                    "preferences. Compare every listed candidate and choose exactly one."
+                ),
+                "criteria": criteria,
+            }
+        },
     }
     response = requests.post(endpoint, json=payload, timeout=timeout)
     response.raise_for_status()
     answers = response.json()["answers"]
-    return [float(answers[f"candidate_{index}"]["noul"]) for index in range(len(candidates))]
+    probabilities = answers["best_candidate"]["probabilities"]
+    return [float(probabilities[item_id]) for item_id in candidate_ids]
 
 
 def ndcg_at_k(rank: int, k: int) -> float:
@@ -137,7 +142,7 @@ def main() -> None:
                 history = [{"item_id": item_id, **catalog[item_id]} for item_id in history_ids]
                 started = time.perf_counter()
                 probabilities = score_candidates(
-                    args.endpoint, history, [catalog[item_id] for item_id in candidate_ids], args.timeout
+                    args.endpoint, history, candidate_ids, [catalog[item_id] for item_id in candidate_ids], args.timeout
                 )
                 scored = [
                     {"item_id": item_id, "score": probability}
