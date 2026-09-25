@@ -1,0 +1,7 @@
+# Additional packages for the local Qwen Jev-style decision service.
+# The A40 jev4rec environment already has these at setup time; pin only after
+# the first end-to-end pilot establishes a compatible combination.
+fastapi
+uvicorn
+transformers
+requests
