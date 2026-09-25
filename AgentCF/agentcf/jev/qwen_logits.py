@@ -144,7 +144,10 @@ class QwenLogitDecisionEngine:
         answers: Dict[str, Answer] = {}
         for row, (name, question, labels, output_keys, _) in enumerate(prepared):
             label_ids = torch.tensor(self._token_ids(labels), device=logits.device)
-            distribution = torch.softmax(logits[row, label_ids] / self.config.temperature, dim=0)
+            # Model weights/logits may be bfloat16. Compute the tiny bounded
+            # softmax in float32: bfloat16 rounds high-confidence values to
+            # exactly 1.0, destroying the ordering needed for reranking.
+            distribution = torch.softmax(logits[row, label_ids].float() / self.config.temperature, dim=0)
             probabilities = {key: float(prob) for key, prob in zip(output_keys, distribution.tolist())}
             confidence = max(probabilities.values())
             if isinstance(question, ChoiceQuestion):
