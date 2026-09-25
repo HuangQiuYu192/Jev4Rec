@@ -71,35 +71,44 @@ def score_candidates(
     candidate_ids: Sequence[str],
     candidates: Sequence[Dict[str, str]],
     timeout: float,
+    choice_permutations: int,
 ) -> List[float]:
     if len(candidate_ids) != len(candidates):
         raise ValueError("candidate ids and candidate metadata have different lengths")
-    # Choice is the native closed-set primitive: its probability distribution
-    # is normalized over the exact ten candidates, unlike independent Noul
-    # questions whose absolute probabilities can all be high.
-    criteria = {
-        item_id: json.dumps(candidate, ensure_ascii=False, sort_keys=True)
-        for item_id, candidate in zip(candidate_ids, candidates)
-    }
+    if not 1 <= choice_permutations <= len(candidate_ids):
+        raise ValueError("choice_permutations must be between 1 and the candidate count")
+    # Choice is the native closed-set primitive, but A--J have a language-model
+    # prior. Rotate candidate-to-label mappings and average mapped-back scores.
+    pairs = list(zip(candidate_ids, candidates))
+    questions = {}
+    for offset in range(choice_permutations):
+        rotated = pairs[offset:] + pairs[:offset]
+        criteria = {
+            item_id: json.dumps(candidate, ensure_ascii=False, sort_keys=True)
+            for item_id, candidate in rotated
+        }
+        questions[f"best_candidate_rotation_{offset}"] = {
+            "type": "choice",
+            "instructions": (
+                "Select the one CD whose title and category are most compatible with the user's demonstrated "
+                "preferences. Compare every listed candidate and choose exactly one."
+            ),
+            "criteria": criteria,
+        }
     payload = {
         "model": "qwen3-14b-jev-style",
         "state": {"recent_history": history},
-        "questions": {
-            "best_candidate": {
-                "type": "choice",
-                "instructions": (
-                    "Select the one CD whose title and category are most compatible with the user's demonstrated "
-                    "preferences. Compare every listed candidate and choose exactly one."
-                ),
-                "criteria": criteria,
-            }
-        },
+        "questions": questions,
     }
     response = requests.post(endpoint, json=payload, timeout=timeout)
     response.raise_for_status()
     answers = response.json()["answers"]
-    probabilities = answers["best_candidate"]["probabilities"]
-    return [float(probabilities[item_id]) for item_id in candidate_ids]
+    scores = {item_id: 0.0 for item_id in candidate_ids}
+    for question_name in questions:
+        probabilities = answers[question_name]["probabilities"]
+        for item_id in candidate_ids:
+            scores[item_id] += float(probabilities[item_id])
+    return [scores[item_id] / choice_permutations for item_id in candidate_ids]
 
 
 def ndcg_at_k(rank: int, k: int) -> float:
@@ -116,6 +125,7 @@ def main() -> None:
     parser.add_argument("--recall-budget", type=int, default=10)
     parser.add_argument("--fix-pos", type=int, default=-1)
     parser.add_argument("--history-length", type=int, default=8)
+    parser.add_argument("--choice-permutations", type=int, default=1)
     parser.add_argument("--timeout", type=float, default=120.0)
     args = parser.parse_args()
 
@@ -142,7 +152,12 @@ def main() -> None:
                 history = [{"item_id": item_id, **catalog[item_id]} for item_id in history_ids]
                 started = time.perf_counter()
                 probabilities = score_candidates(
-                    args.endpoint, history, candidate_ids, [catalog[item_id] for item_id in candidate_ids], args.timeout
+                    args.endpoint,
+                    history,
+                    candidate_ids,
+                    [catalog[item_id] for item_id in candidate_ids],
+                    args.timeout,
+                    args.choice_permutations,
                 )
                 scored = [
                     {"item_id": item_id, "score": probability}

@@ -12,7 +12,7 @@ import pytest
 AGENTCF_DIR = Path(__file__).resolve().parents[1] / "agentcf"
 sys.path.insert(0, str(AGENTCF_DIR))
 
-from run_jev_direct_rerank import candidate_set
+from run_jev_direct_rerank import candidate_set, score_candidates
 
 
 def test_candidate_set_reproduces_seeded_agentcf_shuffle() -> None:
@@ -25,3 +25,8 @@ def test_candidate_set_reproduces_seeded_agentcf_shuffle() -> None:
 def test_candidate_set_rejects_insufficient_persisted_negatives() -> None:
     with pytest.raises(ValueError, match="shorter"):
         candidate_set(["n1"], "positive", 4, -1, np.random.RandomState(0))
+
+
+def test_choice_permutation_bounds_fail_before_network_request() -> None:
+    with pytest.raises(ValueError, match="choice_permutations"):
+        score_candidates("http://unused", [], ["a", "b"], [{}, {}], 1.0, 0)

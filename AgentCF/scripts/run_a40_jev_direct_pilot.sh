@@ -26,6 +26,7 @@ python run_jev_direct_rerank.py \
   --dataset-dir dataset/CDs-100-user-dense \
   --endpoint http://127.0.0.1:8010/v1/systemone \
   --users "${JEV_PILOT_USERS:-20}" \
+  --choice-permutations "${JEV_CHOICE_PERMUTATIONS:-1}" \
   --seed 2026 \
   --recall-budget 10 \
   --fix-pos -1 \
